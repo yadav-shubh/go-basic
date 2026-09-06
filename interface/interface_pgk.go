@@ -9,10 +9,15 @@ func main() {
 
 type Animal interface {
 	Walk() string
+	Eat() string
 }
 
 type Dog struct {
 	Name string
+}
+
+func (a *Dog) Eat() string {
+	return "Dog can eat"
 }
 
 type Fox struct {
