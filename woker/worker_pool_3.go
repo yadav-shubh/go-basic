@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
 )
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	wg := new(sync.WaitGroup)
 
 	jobs := make(chan Job, 10)
@@ -15,7 +19,7 @@ func main() {
 	wg.Add(3)
 	// worker creation
 	for w := 1; w <= 3; w++ {
-		go workerJob(jobs, results, wg)
+		go workerJob(ctx, jobs, results, wg)
 	}
 
 	for w := 1; w <= 10; w++ {
@@ -41,20 +45,29 @@ func main() {
 
 }
 
-func workerJob(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup) {
+func workerJob(ctx context.Context, jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup) {
 	defer wg.Done()
-	for job := range jobs {
-		var result Result
-		result.job = job
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Printf("Worker cancelled: %v\n", ctx.Err())
+			return
+		case job, ok := <-jobs:
+			if !ok {
+				return
+			}
+			var result Result
+			result.job = job
 
-		// Simulate failure for every third job
-		if job.id%3 == 0 {
-			result.err = errors.New(fmt.Sprintf("job %d processing failed", job.id))
-		} else {
-			result.output = fmt.Sprintf("%d", job.id)
+			// Simulate failure for every third job
+			if job.id%3 == 0 {
+				result.err = errors.New(fmt.Sprintf("job %d processing failed", job.id))
+			} else {
+				result.output = fmt.Sprintf("%d", job.id)
+			}
+
+			results <- result
 		}
-
-		results <- result
 	}
 }
 
