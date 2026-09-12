@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 )
@@ -31,7 +32,11 @@ func main() {
 	}()
 
 	for r := range results {
-		fmt.Println("result", r)
+		if r.err != nil {
+			fmt.Printf("❌ Error: job %d - %v\n", r.job.id, r.err)
+		} else {
+			fmt.Printf("✅ Job %d result: %s\n", r.job.id, r.output)
+		}
 	}
 
 }
@@ -39,11 +44,17 @@ func main() {
 func workerJob(jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for job := range jobs {
-		fmt.Printf("Send job to result: %d\n", job.id)
-		results <- Result{
-			job:    job,
-			output: fmt.Sprintf("%d", job.id),
+		var result Result
+		result.job = job
+
+		// Simulate failure for every third job
+		if job.id%3 == 0 {
+			result.err = errors.New(fmt.Sprintf("job %d processing failed", job.id))
+		} else {
+			result.output = fmt.Sprintf("%d", job.id)
 		}
+
+		results <- result
 	}
 }
 
@@ -55,4 +66,5 @@ type Job struct {
 type Result struct {
 	job    Job
 	output string
+	err    error
 }
