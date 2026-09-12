@@ -4,10 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
+	"time"
 )
 
 func main() {
+	rand.Seed(time.Now().UnixNano())
+	
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -19,7 +23,7 @@ func main() {
 	wg.Add(3)
 	// worker creation
 	for w := 1; w <= 3; w++ {
-		go workerJob(ctx, jobs, results, wg)
+		go workerJob(ctx, cancel, jobs, results, wg)
 	}
 
 	for w := 1; w <= 10; w++ {
@@ -45,21 +49,34 @@ func main() {
 
 }
 
-func workerJob(ctx context.Context, jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup) {
+func workerJob(ctx context.Context, cancel context.CancelFunc, jobs <-chan Job, results chan<- Result, wg *sync.WaitGroup) {
 	defer wg.Done()
+	workerID := fmt.Sprintf("Worker-%d", rand.Intn(1000))
+	
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Printf("Worker cancelled: %v\n", ctx.Err())
+			fmt.Printf("[%s] Exiting due to cancellation\n", workerID)
 			return
 		case job, ok := <-jobs:
 			if !ok {
+				fmt.Printf("[%s] Jobs channel closed, exiting\n", workerID)
 				return
 			}
+			
 			var result Result
 			result.job = job
 
-			// Simulate failure for every third job
+			// Job 5 triggers fatal error and cancels context
+			if job.id == 5 {
+				fmt.Printf("[%s] 🔴 FATAL ERROR on job %d - triggering cancellation for all workers\n", workerID, job.id)
+				result.err = errors.New("job 5 fatal error - cancelling all workers")
+				results <- result
+				cancel() // Broadcast cancellation to all workers
+				return
+			}
+
+			// Simulate failure for every third job (but not job 5)
 			if job.id%3 == 0 {
 				result.err = errors.New(fmt.Sprintf("job %d processing failed", job.id))
 			} else {
